@@ -137,7 +137,7 @@ converter x
   | abs (x - 2/3) < 0.1 && x > 2/3 = "2/3 + " ++ f (x - 2/3)
   where f x = show $ (fromIntegral $ round (1000 * (abs x)) ) / 1000.0
 	  
-displayAlg :: String -> (t -> [a]) -> ([a] -> s) ->  -> IO ()
+displayAlg :: Show s => String -> (t -> [a]) -> ([a] -> s) -> t -> IO ()
 displayAlg name alg conv xs = do
 	printf "%s: %d bins used\n" name (length result)
 	print $ conv result
