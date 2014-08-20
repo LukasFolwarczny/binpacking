@@ -22,4 +22,15 @@ interactively. In GHCi you would simply write this command:
 Algorithms
 ----------
 
-TODO
+* Online
+ * Best Fit
+ * First Fit
+* Offline
+ * First Fit Decreasing
+ * Optimal solution with brute force
+ * Optimal solution with dynamic programming (suitable for instances with a small number
+   of different item sizes)
+ * Asymptotic polynomial time approximation scheme (for a given ε packs the items into (1+ε)*OPT + 1 bins)
+* Bounded-space version
+ * Best Fit
+ * Optimal solution with brute force
