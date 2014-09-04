@@ -17,6 +17,7 @@ convertUO, convertOU, convertMU, convertUM)
 where
 
 import Data.List
+import Data.Ord
 import qualified Data.Map as M
 
 -- Online algorithms (Best Fit, First Fit) use ordered items since the order in which
@@ -67,7 +68,7 @@ bestFitAddItem it@(s,_) bins
 
 
 bestFitBounded :: Int -> [UItem] -> [Bin]
-bestFitBounded k = mergePair . foldl (flip (bestFitBoundedAddItem k)) ([],[]) . (flip zip) [1..]
+bestFitBounded k = uncurry (++) . foldl (flip (bestFitBoundedAddItem k)) ([],[]) . (flip zip) [1..]
 
 bestFitBoundedPerf :: Int -> [UItem] -> Int
 bestFitBoundedPerf k = length . (bestFitBounded k)
@@ -78,7 +79,7 @@ bestFitBoundedAddItem k it@(s,_) (open,closed)
   | null goodSizes = ((filter (/= fullestBin) open) ++ [[it]], closed ++ [fullestBin])
   | otherwise = (updateFirst ((== maximum goodSizes) . binSize) (++[it]) open, closed)
   where goodSizes = [ binSize c | c <- open, binSize c + s <= 1]
-        fullestBin = maximumBy (makeComparator binSize) open
+        fullestBin = maximumBy (comparing binSize) open
 
 ---- First Fit ----
 -- Puts the item into the first bin in which it fits.
@@ -114,7 +115,7 @@ optimalBPPerf = length . optimalBP
 
 optimal :: [UBin] -> [UItem] -> [UBin]
 optimal bins [] = bins
-optimal bins (x:xs) = minimumBy (makeComparator length) [ optimal b xs | b <- genStates bins x ]
+optimal bins (x:xs) = minimumBy (comparing length) [ optimal b xs | b <- genStates bins x ]
 
 genStates :: [UBin] -> UItem -> [[UBin]]
 genStates bins it = (bins ++ [[it]]):(multiApplyIf (++[it]) ((<= 1-it) . sum) bins)
@@ -128,9 +129,9 @@ optimalBPBoundedPerf :: Int -> [UItem] -> Int
 optimalBPBoundedPerf k = length . optimalBPBounded k
 
 optimalBounded :: ([UBin], [UBin]) -> [UItem] -> [UBin]
-optimalBounded bins [] = mergePair bins
+optimalBounded bins [] = uncurry (++) bins
 optimalBounded bins@(open, _) (x:xs) =
-  minimumBy (makeComparator length) [ optimalBounded (optimalPutIntoBin x i bins) xs | i <- [0..(length open)-1] ]
+  minimumBy (comparing length) [ optimalBounded (optimalPutIntoBin x i bins) xs | i <- [0..(length open)-1] ]
 
 optimalPutIntoBin :: UItem -> Int -> ([UBin], [UBin]) -> ([UBin], [UBin])
 optimalPutIntoBin item i (open, closed)
@@ -146,7 +147,7 @@ dynamicBP items = map (filter $ (/= 0) . snd) $ snd $ mymap M.! items
   mymap = M.fromList $ [ (st, f st) | st <- dynamicStates items ]
   f ys
     | (sum $ map totalSize ys) == 0 = (0, [])
-    | otherwise = minimumBy (makeComparator fst)
+    | otherwise = minimumBy (comparing fst)
 	  [ (1 + n, zs:packing)  | zs <- binConfigs, let newState = subMLists ys zs, validMList $ newState, let (n, packing) = mymap M.! newState ]
 
 -- dynamicBPPerf is a bit faster than dynamicBP because it stores less data
@@ -201,7 +202,7 @@ aptasBig :: SizeT -> [Item] -> [Bin]
 aptasBig eps items = foldl (flip firstFitAddItem) roundedPacking fstGroup
   where
   k = max (floor(eps * (sum $ map fst items))) 1
-  fstGroup:groups = groupList k $ reverse $ sortBy (makeComparator fst) items
+  fstGroup:groups = groupList k $ reverse $ sortBy (comparing fst) items
   roundedPacking = aptasRounded groups
 
 -- Rounds all items of each group to the size of largest item in the group,
@@ -232,9 +233,6 @@ updateFirst pred f (x:xs)
   | pred x = (f x):xs
   | otherwise = (x:updateFirst pred f xs)
 
-mergePair :: ([a],[a]) -> [a]
-mergePair (a,b) = b ++ a
-
 multiApplyIf :: (a -> a) -> (a -> Bool) -> [a] -> [[a]]
 multiApplyIf f pred xs = [ applyAt i f xs | i <- [0..(length xs)-1], pred (xs !! i) ]
 
@@ -242,10 +240,6 @@ applyAt :: Int -> (a -> a) -> [a] -> [a]
 applyAt 0 f (x:xs) = (f x):xs
 applyAt n f (x:xs) = x:(applyAt (n-1) f xs)
 
-makeComparator :: Ord a => (b -> a) -> (b -> b -> Ordering)
-makeComparator f a b = f a `compare` f b
-
 groupList :: Int -> [a] -> [[a]]
-groupList k items
-  | length items <= k = [items]
-  | otherwise = (take k items):(groupList k (drop k items) )
+groupList k [] = []
+groupList k xs = (take k xs):(groupList k (drop k xs) )
