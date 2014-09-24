@@ -1,23 +1,36 @@
-{-
- - BinPacking module
- - 2014 Lukáš Folwarczný <lfolwarczny@gmail.com>
- -}
+{-|
+Module      : BinPacking
+Description : Algorithms for the Bin Packing problem
+Copyright   : Lukáš Folwarczný, 2014
+Maintainer  : lfolwarczny@gmail.com
+-}
 module BinPacking
-(bestFit, bestFitPerf, bestFitAddItem,
-bestFitBounded, bestFitBoundedPerf, bestFitBoundedAddItem,
-firstFit, firstFitPerf, firstFitAddItem,
-firstFitDecreasing, firstFitDecreasingPerf,
-optimalBP, optimalBPPerf,
-optimalBPBounded, optimalBPBoundedPerf,
-dynamicBP, dynamicBPPerf,
-aptasBP, aptasBPPerf,
-SizeT, Item, UItem, Bin, UBin, MBin,
+(
+-- * Data types
+SizeT, Item, UItem, MItem, Bin, UBin, MBin,
+-- * Online algorithms
+firstFit,
+bestFit,
+-- * Offline algorithms
+firstFitDecreasing,
+optimalBP,
+dynamicBP,
+aptasBP,
+-- * Bounded-Space Bin Packing
+bestFitBounded,
+optimalBPBounded,
+-- * General versions
+firstFit',
+bestFit',
+bbf',
+-- * Utilities
 convertUO, convertOU, convertMU, convertUM)
 
 where
 
 import Data.List
 import Data.Ord
+import Data.Maybe
 import qualified Data.Map as M
 
 -- Online algorithms (Best Fit, First Fit) use ordered items since the order in which
@@ -51,59 +64,80 @@ convertMU = concatMap f
 convertUM :: [UItem] -> [MItem]
 convertUM = map (\x -> (head x, length x)) . group . sort
 
----- Best Fit ----
--- Puts the item into the fullest bin in which it fits.
+stdFitsIntoBin s bin = sum (s:bin) <= 1.0
 
-bestFit :: [UItem] -> [Bin]
-bestFit = foldl (flip bestFitAddItem) [] . (flip zip) [1..]
+firstFit' :: (a -> [a] -> Bool) -> [a] -> [[a]]
+firstFit' fitsIntoBin = foldl (firstFitAddItem' fitsIntoBin) []
 
-bestFitPerf :: [UItem] -> Int
-bestFitPerf = length . bestFit
+firstFitAddItem' :: (a -> [a] -> Bool) -> [[a]] -> a -> [[a]]
+firstFitAddItem' fitsIntoBin bins item
+  | isNothing $ find (fitsIntoBin item) bins = bins ++ [[item]]
+  | otherwise = updateFirst (fitsIntoBin item) (++[item]) bins
 
-bestFitAddItem :: Item -> [Bin] -> [Bin]
-bestFitAddItem it@(s,_) bins
-  | null goodSizes = bins ++ [[it]]
-  | otherwise = updateFirst ((== maximum goodSizes) . binSize) (++[it]) bins
-  where goodSizes = [ binSize c | c <- bins, binSize c + s <= 1]
+-- | The /First Fit/ algorithm. Each item is put into the first bin where it fits.
+--
+-- > firstFit [0.3, 0.8, 0.2, 0.7] == [ [0.3, 0.2], [0.8], [0.7] ]
+-- > firstFit [0.6, 0.7, 0.1, 0.3, 0.3] == [ [0.6, 0.1, 0.3], [0.7, 0.3] ]
+firstFit :: [UItem] -> [UBin]
+firstFit = firstFit' fitsIntoBin
+  where fitsIntoBin it bin = sum (it:bin) <= 1.0
 
-
-bestFitBounded :: Int -> [UItem] -> [Bin]
-bestFitBounded k = uncurry (++) . foldl (flip (bestFitBoundedAddItem k)) ([],[]) . (flip zip) [1..]
-
-bestFitBoundedPerf :: Int -> [UItem] -> Int
-bestFitBoundedPerf k = length . (bestFitBounded k)
-
-bestFitBoundedAddItem :: Int -> Item -> ([Bin],[Bin]) -> ([Bin],[Bin])
-bestFitBoundedAddItem k it@(s,_) (open,closed)
-  | null goodSizes && length open < k = (open ++ [[it]], closed)
-  | null goodSizes = ((filter (/= fullestBin) open) ++ [[it]], closed ++ [fullestBin])
-  | otherwise = (updateFirst ((== maximum goodSizes) . binSize) (++[it]) open, closed)
-  where goodSizes = [ binSize c | c <- open, binSize c + s <= 1]
-        fullestBin = maximumBy (comparing binSize) open
-
----- First Fit ----
--- Puts the item into the first bin in which it fits.
-
-firstFit :: [UItem] -> [Bin]
-firstFit = foldl (flip firstFitAddItem) [] . (flip zip) [1..]
-
-firstFitPerf :: [UItem] -> Int
-firstFitPerf = length . firstFit
-
+-- TODO: This is obsolete but used in APTAS.
 firstFitAddItem :: Item -> [Bin] -> [Bin]
 firstFitAddItem it@(s,_) bins
   | find fitsIntoBin bins == Nothing = bins ++ [[it]]
   | otherwise = updateFirst fitsIntoBin (++[it]) bins
   where fitsIntoBin = (<= 1-s) . binSize
 
----- First Fit Decreasing ----
--- First Fit with sorted items (thus it is offline algorithm)
--- It is known that for each instance I: FFD(I) <= (11/9)OPT(I) + 4
+-- | 'firstFitDecreasing' is the same as 'firstFit', but items are sorted in
+-- decreasing order before being processed by the First Fit algorithm.
+--
+-- > firstFitDecreasing [0.3, 0.8, 0.2, 0.7] == [ [0.8, 0.2], [0.7, 0.3] ]
 firstFitDecreasing :: [UItem] -> [UBin]
-firstFitDecreasing = map convertOU . firstFit . reverse . sort
+firstFitDecreasing = firstFit . reverse . sort
 
-firstFitDecreasingPerf :: [UItem] -> Int
-firstFitDecreasingPerf = length . firstFitDecreasing
+bestFit' :: Ord b => (a -> [a] -> Bool) -> ([a] -> b) -> [a] -> [[a]]
+bestFit' fitsIntoBin binSize = foldl (bestFitAddItem' fitsIntoBin binSize) []
+
+bestFitAddItem' :: Ord b => (a -> [a] -> Bool) -> ([a] -> b) -> [[a]] -> a -> [[a]]
+bestFitAddItem' fitsIntoBin binSize bins item
+  | null goodBins = bins ++ [[item]]
+  | otherwise = updateFirst ((== optSize) . binSize) (++[item]) bins
+  where goodBins = filter (fitsIntoBin item) bins
+        optSize = maximum $ map binSize goodBins
+
+-- | The /Best Fit/ algorithm. Each item is put into the fullest bin where it fits.
+--
+-- > bestFit [0.3, 0.8, 0.2, 0.7] == [ [0.3, 0.7], [0.8, 0.2] ]
+-- > bestFit [0.6, 0.7, 0.1, 0.3, 0.3] == [ [0.6, 0.3], [0.7, 0.1], [0.3] ]
+bestFit :: [UItem] -> [UBin]
+bestFit = bestFit' fitsIntoBin sum
+  where fitsIntoBin it bin = sum (it:bin) <= 1.0
+
+
+
+-- Bounded Best Fit
+bbf' :: Ord b => Int -> (a -> [a] -> Bool) -> ([a] -> b) -> [a] -> [[a]]
+bbf' k fitsIntoBin binSize = uncurry (++) . foldl (bbfAddItem' fitsIntoBin binSize) ([], take k $ repeat [])
+
+-- Input and output have both exactly k open bins.
+bbfAddItem' :: Ord b => (a -> [a] -> Bool) -> ([a] -> b) -> ([[a]], [[a]]) -> a -> ([[a]], [[a]])
+bbfAddItem' fitsIntoBin binSize (closed, open) item
+  | null goodBins = (closed ++ [fullest], open' ++ [[item]])
+  | otherwise = (closed, updateFirst ((== bestSize) . binSize) (++[item]) open)
+  where goodBins = filter (fitsIntoBin item) open
+        (open', fullest) = extractMaximum (comparing binSize) open
+        bestSize = maximum $ map binSize $ filter (fitsIntoBin item) open
+
+-- | 'bestFitBounded' k is the /Best Fit/ algorithm for the /k/-bounded-space variant of
+-- Bin Packing.
+--
+-- > bestFitBounded 2 [0.5, 0.6, 0.7, 0.3, 0.4, 0.5] == [ [0.6], [0.7, 0.3], [0.5, 0.4], [0.5] ]
+-- > bestFitBounded 3 [0.5, 0.6, 0.7, 0.3, 0.4, 0.5] == [ [0.5, 0.5], [0.6, 0.4], [0.7, 0.3] ]
+bestFitBounded :: Int -> [UItem] -> [UBin]
+bestFitBounded k = bbf' k fitsIntoBin sum
+  where fitsIntoBin it bin = sum (it:bin) <= 1.0
+
 
 ---- Optimal solution (brute force) ----
 
@@ -232,6 +266,21 @@ updateFirst :: (a -> Bool) -> (a -> a) -> [a] -> [a]
 updateFirst pred f (x:xs)
   | pred x = (f x):xs
   | otherwise = (x:updateFirst pred f xs)
+
+deleteFirst :: (a -> Bool) -> [a] -> [a]
+deleteFirst pred (x:xs)
+  | pred x = xs
+  | otherwise = (x:deleteFirst pred xs)
+
+extractMaximum :: (a -> a -> Ordering) -> [a] -> ([a],a)
+extractMaximum comparator xs = (as ++ bs, m)
+  where maxelem = maximumBy comparator xs
+        (as,m:bs) = span (\x -> comparator maxelem x /= EQ) xs
+
+updateMaximum :: (a -> a -> Ordering) -> (a -> a) -> [a] -> [a]
+updateMaximum comparator f xs = as ++ (f m:bs)
+  where maxelem = maximumBy comparator xs
+        (as,m:bs) = span (\x -> comparator maxelem x /= EQ) xs
 
 multiApplyIf :: (a -> a) -> (a -> Bool) -> [a] -> [[a]]
 multiApplyIf f pred xs = [ applyAt i f xs | i <- [0..(length xs)-1], pred (xs !! i) ]

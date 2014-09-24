@@ -98,19 +98,19 @@ example7 = do
 	printf "Optimal 2-bounded solution: %d bins used\n" (length osol1)
 	putStrLn $ transfSol osol1
 	printf "Best Fit 2-bounded: %d bins used\n" (length sol1)
-	putStrLn $ transfSolO sol1
+	putStrLn $ transfSol sol1
 	putStr "\nInput sequence 2: "
 	putStrLn $ transf seq2
 	printf "Optimal 2-bounded solution: %d bins used\n" (length osol2)
 	putStrLn $ transfSol osol2
 	printf "Best Fit 2-bounded: %d bins used\n" (length sol2)
-	putStrLn $ transfSolO sol2
+	putStrLn $ transfSol sol2
 	putStr "\nInput sequence 3: "
 	putStrLn $ transf seq3
 	printf "Optimal 2-bounded solution: %d bins used\n" (length osol3)
 	putStrLn $ transfSol osol3
 	printf "Best Fit 2-bounded: %d bins used\n" (length sol3)
-	putStrLn $ transfSolO sol3
+	putStrLn $ transfSol sol3
 	putStrLn ""
 	where
 	  seq1 = [1/3, 1/3, 2/3, 2/3]
@@ -124,7 +124,6 @@ example7 = do
 	  osol3 = optimalBPBounded 2 seq3
 	  transf = filter (/= '"') . show . map converter
 	  transfSol = filter (/= '"') . show . (map $ map converter)
-	  transfSolO = filter (/= '"') . show . (map $ map f)
 	  f (a,b) = (converter a, b)
 
 converter :: Rational-> String
@@ -143,13 +142,13 @@ displayAlg name alg conv xs = do
 	print $ conv result
 	where result = alg xs
 
-displayBestFit = displayAlg "Best Fit" bestFit convO
-displayFirstFit = displayAlg "First Fit" firstFit convO
+displayBestFit = displayAlg "Best Fit" bestFit convU
+displayFirstFit = displayAlg "First Fit" firstFit convU
 displayFirstFitDecreasing = displayAlg "First Fit Decreasing" firstFitDecreasing convU
 displayOptimalBP = displayAlg "Optimal solution" optimalBP convU
 displayDynamicBP = displayAlg "Optimal solution with dynamic programming" dynamicBP convO
 displayAPTAS eps = displayAlg ("APTAS with epsilon = " ++ (show $ fromRational eps)) (aptasBP eps) convU
-displayBestFitBounded k = displayAlg ("Best Fit " ++ (show k) ++ "-bounded") (bestFitBounded k) convO
+displayBestFitBounded k = displayAlg ("Best Fit " ++ (show k) ++ "-bounded") (bestFitBounded k) convU
 displayOptimalBPBounded k = displayAlg ("Optimal " ++ (show k) ++ "-bounded solution") (optimalBPBounded k) convU
 
 convO :: [Bin] -> [[(Double,Int)]]
